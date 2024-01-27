@@ -1,0 +1,237 @@
+-- table |alias| keys
+-- posts_questions |q| q.owner_user_id = u.id; q.accepted_answer_id = a.id
+-- posts_answers |a| a.owner_user_id = u.id; a.parent_id = q.id
+-- comments |c| c.post_id = q.id; c.user_id = u.id
+-- users |u|
+-- badges |b| b.user_id = u.id
+
+/* answering Q1 */
+SELECT
+  q.creation_date,
+  q.title question,
+  a.body answer
+FROM
+  `bigquery-public-data.stackoverflow.posts_questions` q
+LEFT JOIN
+  `bigquery-public-data.stackoverflow.posts_answers` a
+ON
+  q.accepted_answer_id = a.id
+WHERE
+  ( q.title LIKE '%python%'
+    OR q.title LIKE 'Python%'
+    OR q.title LIKE '%Python'
+    OR q.title LIKE '%phyton%'
+    OR q.title LIKE 'phyton%'
+    OR q.title LIKE '%phyton'
+    OR q.tags LIKE 'Python%'
+    OR q.tags LIKE '%Python'
+    OR q.tags LIKE '%phyton%'
+    OR q.tags LIKE 'phyton%'
+    OR q.tags LIKE '%phyton' )
+  AND EXTRACT(year
+  FROM
+    q.creation_date) = 2020
+ORDER BY
+  1;
+
+/* answering Q2 */
+WITH
+  indo AS (
+  SELECT
+    u.id, 
+    u.location,
+    CASE
+      WHEN u.location LIKE '%Indonesia' THEN 'Indonesia'
+      WHEN u.location LIKE '%Indonesia%' THEN 'Indonesia'
+      WHEN u.location LIKE 'Indonesia%' THEN 'Indonesia'
+    ELSE
+    'Not Indonesia'
+  END
+    ind_only
+  FROM
+    `bigquery-public-data.stackoverflow.users` u)
+SELECT
+  i.ind_only country,
+  EXTRACT(year
+  FROM
+    q.creation_date) year,
+  COUNT(q.title) question_count,
+FROM
+  `bigquery-public-data.stackoverflow.posts_questions` q
+LEFT JOIN
+  `bigquery-public-data.stackoverflow.users` u
+ON
+  q.owner_user_id = u.id
+LEFT JOIN
+  indo i
+ON 
+  u.id = i.id
+WHERE
+  ind_only = 'Indonesia'
+  AND EXTRACT(year
+  FROM
+    q.creation_date) BETWEEN 2015 AND 2020
+GROUP BY
+  1,
+  2
+ORDER BY
+  2;
+
+/* answering Q3 */ --lom pzti di rank
+SELECT
+  u.id,
+  u.display_name username,
+  b.name badge_name,
+  b.date,
+  b.class,
+  DENSE_RANK() OVER(PARTITION BY b.class ORDER BY b.date) dnrnk, --dense?
+FROM
+  `bigquery-public-data.stackoverflow.users` u
+LEFT JOIN
+  `bigquery-public-data.stackoverflow.badges` b
+ON
+  b.user_id = u.id
+WHERE
+  EXTRACT(month
+  FROM
+    b.date) = 1
+  AND EXTRACT(year
+  FROM
+    b.date) = 2020;
+
+/* answering Q4 */
+SELECT
+  EXTRACT(year
+  FROM
+    q.creation_date) year,
+  COUNT(a.body) answer_cnt,
+  ROW_NUMBER() OVER(ORDER BY COUNT(a.body) DESC) rank
+FROM
+  `bigquery-public-data.stackoverflow.posts_questions` q
+LEFT JOIN
+  `bigquery-public-data.stackoverflow.posts_answers` a
+ON
+  a.parent_id = q.id
+WHERE
+  (q.title LIKE '%bigquery%'
+    OR q.title LIKE 'bigquery%'
+    OR q.title LIKE '%bigquery'
+    OR q.title LIKE '%big query%'
+    OR q.title LIKE 'big query%'
+    OR q.title LIKE '%big query'
+    OR q.tags LIKE '%bigquery%'
+    OR q.tags LIKE 'bigquery%'
+    OR q.tags LIKE '%bigquery'
+    OR q.tags LIKE '%big query%'
+    OR q.tags LIKE 'big query%'
+    OR q.tags LIKE '%big query' )
+GROUP BY
+  1;
+
+/* answering Q5 */
+WITH
+  user_answer_cnt AS (
+  SELECT
+    u.id,
+    u.display_name name,
+    COUNT(a.body) answer_cnt
+  FROM
+    `bigquery-public-data.stackoverflow.users` u
+  LEFT JOIN
+    `bigquery-public-data.stackoverflow.posts_answers` a
+  ON
+    u.id = a.owner_user_id
+  GROUP BY
+    1,2 ),
+  time AS ( 
+  select u.display_name name, u.id, a.creation_date, lag(a.creation_date) over(partition by u.id order by a.creation_date) lag_creation_date
+  FROM
+    `bigquery-public-data.stackoverflow.users` u
+  LEFT JOIN
+    `bigquery-public-data.stackoverflow.posts_answers` a
+  ON
+    u.id = a.owner_user_id
+  )
+SELECT
+  t.id,
+  t.name,
+  answer_cnt,
+  AVG(TIMESTAMP_DIFF(creation_date, lag_creation_date, SECOND)/3600) time_span_answer
+FROM user_answer_cnt uac
+LEFT JOIN time t
+ON uac.id = t.id
+WHERE answer_cnt >= 5000
+GROUP BY
+  1,2,3
+ORDER BY 
+  3 DESC, 4 DESC;
+
+/* answering Q6 */
+SELECT 
+  CASE
+    WHEN location LIKE '%India' THEN 'India'
+    WHEN location LIKE '%United States' THEN 'USA'
+    WHEN location LIKE '%USA' THEN 'USA'
+    WHEN location LIKE '%France' THEN 'France'
+    WHEN location LIKE '%UK%' THEN 'UK'
+    WHEN location LIKE '%UK' THEN 'UK'
+    WHEN location LIKE '%United Kingdom' THEN 'UK'
+    WHEN location LIKE '%Bangladesh' THEN 'Bangladesh'
+    WHEN location LIKE '%Germany' THEN 'Germany'
+    WHEN location LIKE '%China' THEN 'China'
+    WHEN location LIKE '%Indonesia' THEN 'Indonesia'
+    WHEN location LIKE '%Philippines' THEN 'Philippines'
+    WHEN location LIKE '%Pakistan' THEN 'Pakistan'
+    WHEN location LIKE '%Egypt' THEN 'Egypt'
+    WHEN location LIKE '%Singapore' THEN 'Singapore'
+    WHEN location LIKE '%Canada' THEN 'Canada'
+    WHEN location LIKE '%Iran' THEN 'Iran'
+    WHEN location LIKE '%Brazil' THEN 'Brazil'
+    WHEN location LIKE '%Russia' THEN 'Russia'
+    ELSE location
+  END grouped_location, 
+  count(location) count
+FROM
+  `bigquery-public-data.stackoverflow.users`
+WHERE 
+  location IS NOT NULL
+GROUP BY
+  1
+ORDER BY 
+  2 DESC
+LIMIT 
+  10;
+
+/* answering Q7 */
+WITH
+  num_of_question AS (
+  SELECT
+    u.id,
+    u.display_name name,
+    u.last_access_date,
+    u.creation_date,
+    COUNT(q.title) question_cnt,
+    CAST(ROUND(TIMESTAMP_DIFF(u.last_access_date, u.creation_date, day)/365) AS FLOAT64) active_year
+  FROM
+    `bigquery-public-data.stackoverflow.users` u
+  LEFT JOIN
+    `bigquery-public-data.stackoverflow.posts_questions` q
+  ON
+    q.owner_user_id = u.id
+  GROUP BY
+    1,
+    2,
+    3,
+    4 )
+SELECT
+  id,
+  name,
+  active_year,
+  question_cnt,
+  PERCENTILE_CONT(question_cnt, 0.1) OVER() percentile_10,
+  PERCENTILE_CONT(question_cnt, 0.25) OVER() percentile_25,
+  PERCENTILE_CONT(question_cnt, 0.5) OVER() percentile_50,
+  PERCENTILE_CONT(question_cnt, 0.75) OVER() percentile_75,
+  PERCENTILE_CONT(question_cnt, 0.95) OVER() percentile_95
+FROM
+  num_of_question;
